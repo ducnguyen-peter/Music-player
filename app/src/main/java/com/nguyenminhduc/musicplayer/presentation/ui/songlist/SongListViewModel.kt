@@ -33,11 +33,11 @@ class SongListViewModel : ViewModel() {
                 while (cursor.moveToNext()) {
                     val album = cursor.getString(0)
                     val title = cursor.getString(1)
-                    val duration = cursor.getString(2)
+                    val duration = cursor.getLong(2)
                     val path = cursor.getString(3)
                     val artist = cursor.getString(4)
                     audioList.add(
-                        MusicFileUiMapper.map(
+                        MusicFileUiMapper.mapToUi(
                             MusicFile(
                                 album = album,
                                 title = title,
