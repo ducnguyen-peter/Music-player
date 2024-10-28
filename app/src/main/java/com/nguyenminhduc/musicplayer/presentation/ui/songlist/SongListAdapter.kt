@@ -1,7 +1,6 @@
 package com.nguyenminhduc.musicplayer.presentation.ui.songlist
 
 import android.content.Intent
-import android.os.Parcelable
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -11,7 +10,7 @@ import com.bumptech.glide.Glide
 import com.nguyenminhduc.musicplayer.R
 import com.nguyenminhduc.musicplayer.databinding.ItemRowSongBinding
 import com.nguyenminhduc.musicplayer.presentation.ui.Const
-import com.nguyenminhduc.musicplayer.presentation.ui.SongPlayerActivity
+import com.nguyenminhduc.musicplayer.presentation.ui.player.SongPlayerActivity
 import com.nguyenminhduc.musicplayer.presentation.ui.mapper.MusicFileUiMapper
 import com.nguyenminhduc.musicplayer.presentation.ui.model.MusicFileUiModel
 
