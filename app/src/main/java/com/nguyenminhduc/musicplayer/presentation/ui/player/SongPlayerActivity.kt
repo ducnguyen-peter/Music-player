@@ -1,8 +1,12 @@
 package com.nguyenminhduc.musicplayer.presentation.ui.player
 
+import android.content.ComponentName
+import android.content.Intent
+import android.content.ServiceConnection
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
+import android.os.IBinder
 import android.widget.SeekBar
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -13,7 +17,9 @@ import androidx.transition.TransitionManager
 import com.bumptech.glide.Glide
 import com.nguyenminhduc.musicplayer.R
 import com.nguyenminhduc.musicplayer.data.pojo.MusicFile
+import com.nguyenminhduc.musicplayer.data.pref.SongPlayerSharedPref
 import com.nguyenminhduc.musicplayer.databinding.ActivitySongPlayerBinding
+import com.nguyenminhduc.musicplayer.presentation.service.SongPlayingService
 import com.nguyenminhduc.musicplayer.presentation.ui.Const
 import com.nguyenminhduc.musicplayer.presentation.ui.mapper.MusicFileUiMapper
 import com.nguyenminhduc.musicplayer.presentation.ui.model.MusicFileUiModel
@@ -24,10 +30,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.koin.core.parameter.parametersOf
 
-class SongPlayerActivity : AppCompatActivity() {
+class SongPlayerActivity : AppCompatActivity(), ServiceConnection {
 
     private var isInitialized = false
 
@@ -41,6 +48,8 @@ class SongPlayerActivity : AppCompatActivity() {
     private val btnPlayPause get() = binding.btnPlayPause
     private val btnNext get() = binding.btnNext
     private val btnPrevious get() = binding.btnPrevious
+    private val btnShuffle get() = binding.btnShuffle
+    private val btnLoop get() = binding.btnLoop
     private val tvDuration get() = binding.tvDuration
     private val tvCurrentTime get() = binding.tvCurrentTime
     private val seekBar get() = binding.seekbar
@@ -48,7 +57,7 @@ class SongPlayerActivity : AppCompatActivity() {
 
     private val viewModel: SongPlayerViewModel by viewModel {
         parametersOf(
-            (intent?.getParcelableExtra(Const.ActivityArgs.ARG_SONG_MODEL) as? MusicFile)?.let { MusicFileUiMapper.mapToUi(it) },
+            intent?.getIntExtra(Const.ActivityArgs.ARG_SONG_INDEX, 0),
             (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL))?.let { song ->
                 song.map { MusicFileUiMapper.mapToUi(it) }
             }
@@ -56,9 +65,10 @@ class SongPlayerActivity : AppCompatActivity() {
     }
 
     private var uri: Uri? = null
-    private var mediaPlayer: MediaPlayer? = null
+//    private var mediaPlayer: MediaPlayer? = null
     private var countUpJob: Job? = null
     private var lastDuration: Long = 0
+    private var songPlayingService: SongPlayingService? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,21 +91,37 @@ class SongPlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        val intent = Intent(this, SongPlayingService::class.java).putParcelableArrayListExtra(
+            Const.ActivityArgs.ARG_LIST_SONG_MODEL, (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)) as ArrayList
+        )
+        bindService(intent, this, BIND_AUTO_CREATE)
+    }
+
     private fun setupUI() {
         btnBack.setOnClickListener {
             finish()
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
+            songPlayingService?.stop()
+            songPlayingService?.release()
         }
         setupSeekBar()
         setupBtnPlayPause()
         setupBtnNext()
         setupBtnPrevious()
+        setupBtnShuffle()
+        setupBtnLoop()
     }
 
     private fun setupViewModel() {
         viewModel.song.observe(this) {
             updateUI(it)
+        }
+        viewModel.isShuffling.observe(this) {
+            shufflePlayList(it)
+        }
+        viewModel.isRepeating.observe(this) {
+            repeatSong(it)
         }
     }
 
@@ -103,8 +129,11 @@ class SongPlayerActivity : AppCompatActivity() {
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(p0: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    mediaPlayer?.seekTo(progress * 1000)
+                    songPlayingService?.seekTo(progress * 1000)
                     setupDuration(start = (progress * 1000).toLong(), end = viewModel.song.value?.duration ?: 0L)
+                }
+                if (progress == p0?.max && viewModel.song.value?.path?.endsWith(".ogg") == true) { // custom completion listener for .ogg
+                    viewModel.onAutoNext()
                 }
             }
 
@@ -116,15 +145,15 @@ class SongPlayerActivity : AppCompatActivity() {
 
     private fun setupBtnPlayPause() {
         btnPlayPause.setOnClickListener {
-            if (mediaPlayer?.isPlaying == true) {
+            if (songPlayingService?.isPlaying() == true) {
                 btnPlayPause.setImageResource(R.drawable.baseline_play_arrow_24)
                 TransitionManager.beginDelayedTransition(main)
-                mediaPlayer?.pause()
+                songPlayingService?.pause()
                 stopCountUp()
             } else {
                 btnPlayPause.setImageResource(R.drawable.baseline_pause_24)
                 TransitionManager.beginDelayedTransition(main)
-                mediaPlayer?.start()
+                songPlayingService?.start()
                 setupDuration(start = lastDuration, end = viewModel.song.value?.duration ?: 0L)
             }
         }
@@ -139,6 +168,18 @@ class SongPlayerActivity : AppCompatActivity() {
     private fun setupBtnPrevious() {
         btnPrevious.setOnClickListener {
             viewModel.onPreviousClick()
+        }
+    }
+
+    private fun setupBtnShuffle() {
+        btnShuffle.setOnClickListener {
+            viewModel.shuffleClick()
+        }
+    }
+
+    private fun setupBtnLoop() {
+        btnLoop.setOnClickListener {
+            viewModel.repeatClick()
         }
     }
 
@@ -157,11 +198,13 @@ class SongPlayerActivity : AppCompatActivity() {
 
     private fun setupAutoPlay(song: MusicFileUiModel) {
         btnPlayPause.setImageResource(R.drawable.baseline_pause_24)
-        uri = Uri.parse(song.path)
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = MediaPlayer.create(applicationContext, uri)
-        mediaPlayer?.start()
+        songPlayingService?.stop()
+        songPlayingService?.release()
+        songPlayingService?.createMediaPlayer(viewModel.songList.value.orEmpty().indexOf(song))
+        songPlayingService?.start()
+        songPlayingService?.setOnCompletionListener {
+            viewModel.onAutoNext()
+        }
     }
 
 
@@ -181,6 +224,18 @@ class SongPlayerActivity : AppCompatActivity() {
 
     private fun updateSeekBarDuration(song: MusicFileUiModel) {
         seekBar.max = song.duration?.toInt()?.div(1000) ?: 0
+    }
+
+    private fun shufflePlayList(isShuffle: Boolean) {
+        btnShuffle.setImageResource(
+            if (isShuffle) R.drawable.baseline_shuffle_on_24 else R.drawable.baseline_shuffle_24
+        )
+    }
+
+    private fun repeatSong(isRepeating: Boolean) {
+        btnLoop.setImageResource(
+            if (isRepeating) R.drawable.baseline_repeat_on_24 else R.drawable.baseline_repeat_off_24
+        )
     }
 
     private fun countUp(
@@ -205,5 +260,14 @@ class SongPlayerActivity : AppCompatActivity() {
     private fun stopCountUp() {
         countUpJob.takeIf { it?.isActive == true }?.cancel()
         countUpJob = null
+    }
+
+    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+        songPlayingService = (service as? SongPlayingService.SongPlayingServiceBinder)?.getService()
+        viewModel.song.value?.let { setupAutoPlay(it) }
+    }
+
+    override fun onServiceDisconnected(name: ComponentName?) {
+        songPlayingService = null
     }
 }

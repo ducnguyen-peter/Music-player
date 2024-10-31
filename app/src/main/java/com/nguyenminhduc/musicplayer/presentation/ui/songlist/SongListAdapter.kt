@@ -60,7 +60,7 @@ class SongListAdapter : ListAdapter<MusicFileUiModel, SongListAdapter.SongItemVi
                             Const.ActivityArgs.ARG_LIST_SONG_MODEL,
                             ArrayList(songList)
                         )
-                        putExtra(Const.ActivityArgs.ARG_SONG_MODEL, MusicFileUiMapper.mapToEntity(song))
+                        putExtra(Const.ActivityArgs.ARG_SONG_INDEX, currentList.indexOf(song))
                     }
                 )
             }

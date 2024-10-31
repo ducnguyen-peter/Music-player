@@ -131,8 +131,8 @@
         android:id="@+id/clControls"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="8dp"
         android:layout_marginBottom="24dp"
+        android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <androidx.appcompat.widget.AppCompatImageView
