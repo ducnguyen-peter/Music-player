@@ -6,11 +6,9 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Binder
 import android.os.IBinder
-import android.util.Log
 import com.nguyenminhduc.musicplayer.data.pojo.MusicFile
 import com.nguyenminhduc.musicplayer.presentation.ui.Const
-import com.nguyenminhduc.musicplayer.presentation.ui.mapper.MusicFileUiMapper
-import com.nguyenminhduc.musicplayer.presentation.ui.model.MusicFileUiModel
+import com.nguyenminhduc.musicplayer.presentation.ui.player.PlayerController
 import com.nguyenminhduc.musicplayer.presentation.utils.orFalse
 
 class SongPlayingService: Service() {
@@ -19,6 +17,7 @@ class SongPlayingService: Service() {
     var mediaPlayer: MediaPlayer? = null
     var songList = listOf<MusicFile>()
     var uri: Uri? = null
+    private var playerController: PlayerController? = null
 
     override fun onBind(intent: Intent?): IBinder? {
         songList = (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)).orEmpty()
@@ -31,7 +30,7 @@ class SongPlayingService: Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         songList = (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)).orEmpty()
-        return super.onStartCommand(intent, flags, startId)
+        return START_STICKY
     }
 
     fun start() {
