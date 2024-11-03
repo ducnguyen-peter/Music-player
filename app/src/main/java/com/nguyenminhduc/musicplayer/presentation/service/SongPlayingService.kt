@@ -6,6 +6,9 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Binder
 import android.os.IBinder
+import com.nguyenminhduc.musicplayer.MainApplication.Companion.ACTION_NEXT
+import com.nguyenminhduc.musicplayer.MainApplication.Companion.ACTION_PLAY
+import com.nguyenminhduc.musicplayer.MainApplication.Companion.ACTION_PREVIOUS
 import com.nguyenminhduc.musicplayer.data.pojo.MusicFile
 import com.nguyenminhduc.musicplayer.presentation.ui.Const
 import com.nguyenminhduc.musicplayer.presentation.ui.player.PlayerController
@@ -17,7 +20,7 @@ class SongPlayingService: Service() {
     var mediaPlayer: MediaPlayer? = null
     var songList = listOf<MusicFile>()
     var uri: Uri? = null
-    private var playerController: PlayerController? = null
+    var playerController: PlayerController? = null
 
     override fun onBind(intent: Intent?): IBinder? {
         songList = (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)).orEmpty()
@@ -29,7 +32,12 @@ class SongPlayingService: Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        songList = (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)).orEmpty()
+        (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL))?.let { songList = it }
+        when (intent?.getStringExtra("ActionName")) {
+            ACTION_PLAY -> playerController?.onPlayPauseClick()
+            ACTION_NEXT -> playerController?.onNextClick()
+            ACTION_PREVIOUS -> playerController?.onPreviousClick()
+        }
         return START_STICKY
     }
 

@@ -32,8 +32,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:name=".presentation.service.SongPlayingService"
+
+        <service
+            android:name=".presentation.service.SongPlayingService"
             android:enabled="true" />
+
+        <receiver
+            android:name=".presentation.receiver.NotificationReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="action_previous" />
+                <action android:name="action_next" />
+                <action android:name="action_play" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

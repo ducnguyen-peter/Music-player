@@ -5,8 +5,12 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
+import android.graphics.drawable.Icon
+import android.media.MediaMetadata
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -26,6 +30,7 @@ import com.nguyenminhduc.musicplayer.MainApplication.Companion.CHANNEL_ID_2
 import com.nguyenminhduc.musicplayer.R
 import com.nguyenminhduc.musicplayer.data.pojo.MusicFile
 import com.nguyenminhduc.musicplayer.databinding.ActivitySongPlayerBinding
+import com.nguyenminhduc.musicplayer.presentation.receiver.NotificationReceiver
 import com.nguyenminhduc.musicplayer.presentation.service.SongPlayingService
 import com.nguyenminhduc.musicplayer.presentation.ui.Const
 import com.nguyenminhduc.musicplayer.presentation.ui.mapper.MusicFileUiMapper
@@ -39,6 +44,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.koin.core.parameter.parametersOf
+
 
 class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerController {
 
@@ -70,12 +76,12 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         )
     }
 
-    private var uri: Uri? = null
-//    private var mediaPlayer: MediaPlayer? = null
+    private var currentSong: MusicFileUiModel = MusicFileUiModel()
     private var countUpJob: Job? = null
     private var lastDuration: Long = 0
     private var songPlayingService: SongPlayingService? = null
     private var mediaSession: MediaSession? = null
+    private val notificationReceiver = NotificationReceiver()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +93,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+        setupReceiver()
     }
 
     override fun onStart() {
@@ -104,6 +111,18 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
             Const.ActivityArgs.ARG_LIST_SONG_MODEL, (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)) as ArrayList
         )
         bindService(intent, this, BIND_AUTO_CREATE)
+    }
+
+    private fun setupReceiver() {
+        val intentFilter = IntentFilter()
+        intentFilter.addAction(ACTION_PLAY)
+        intentFilter.addAction(ACTION_NEXT)
+        intentFilter.addAction(ACTION_PREVIOUS)
+        registerReceiver(
+            notificationReceiver,
+            intentFilter,
+            RECEIVER_NOT_EXPORTED
+        )
     }
 
     private fun setupUI() {
@@ -140,7 +159,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
                     setupDuration(start = (progress * 1000).toLong(), end = viewModel.song.value?.duration ?: 0L)
                 }
                 if (progress == p0?.max && viewModel.song.value?.path?.endsWith(".ogg") == true) { // custom completion listener for .ogg
-                    viewModel.onAutoNext()
+                    viewModel.updateSong(viewModel.getNextSong()?.also { setupAutoPlay(it) })
                 }
             }
 
@@ -189,20 +208,28 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
             .placeholder(R.drawable.ic_launcher_foreground)
             .into(ivSongAlbum)
         mediaSession = MediaSession(this, "My Media Session")
-        setupAutoPlay(song)
+        mediaSession?.setMetadata(
+            MediaMetadata.Builder()
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, song.duration ?: 0L)
+                .build()
+        )
+        if (songPlayingService != null) setupAutoPlay(song)
         updateSeekBarDuration(song)
         setupDuration(end = song.duration ?: 0L)
     }
 
     private fun setupAutoPlay(song: MusicFileUiModel) {
+        if (song == currentSong) return
+        currentSong = song
         btnPlayPause.setImageResource(R.drawable.baseline_pause_24)
         songPlayingService?.stop()
         songPlayingService?.release()
         songPlayingService?.createMediaPlayer(viewModel.songList.value.orEmpty().indexOf(song))
         songPlayingService?.start()
         songPlayingService?.setOnCompletionListener {
-            viewModel.onAutoNext()
+            viewModel.updateSong(viewModel.getNextSong()?.also { setupAutoPlay(it) })
         }
+        showNotification(song)
     }
 
 
@@ -260,42 +287,51 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         countUpJob = null
     }
 
-    fun showNotification() {
+    private fun showNotification(song: MusicFileUiModel) {
+        val playPauseIcon =
+            if (songPlayingService?.isPlaying() == true) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
         val intent = Intent(this, SongPlayerActivity::class.java)
-        val prevIntent = Intent(this, SongPlayerActivity::class.java).setAction(ACTION_PREVIOUS)
-        val nextIntent = Intent(this, SongPlayerActivity::class.java).setAction(ACTION_NEXT)
-        val playPauseIntent = Intent(this, SongPlayerActivity::class.java).setAction(ACTION_PLAY)
+        val prevIntent = Intent(this, NotificationReceiver::class.java).setAction(ACTION_PREVIOUS)
+        val nextIntent = Intent(this, NotificationReceiver::class.java).setAction(ACTION_NEXT)
+        val playPauseIntent = Intent(this, NotificationReceiver::class.java).setAction(ACTION_PLAY)
+
         val contentIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
         val prevPending = PendingIntent.getBroadcast(this, 0, prevIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val nextPending = PendingIntent.getBroadcast(this, 0, nextIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPausePending = PendingIntent.getBroadcast(this, 0, playPauseIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
         val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL_ID_2)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setLargeIcon(viewModel.song.value?.albumArt)
-                .setContentTitle(viewModel.song.value?.title)
-                .setContentText(viewModel.song.value?.artist)
-                .addAction(Notification.Action(R.drawable.baseline_skip_previous_24, "Previous", prevPending))
-                .addAction(Notification.Action(R.drawable.baseline_skip_next_24, "Next", nextPending))
-                .addAction(Notification.Action(R.drawable.baseline_pause_24, "Pause", playPausePending))
+                .setLargeIcon(song.albumArt)
+                .setContentTitle(song.title)
+                .setContentText(song.artist)
+                .addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.baseline_skip_previous_24), "Previous", prevPending).build())
+                .addAction(Notification.Action.Builder(Icon.createWithResource(this, playPauseIcon), "Pause", playPausePending).build())
+                .addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.baseline_skip_next_24), "Next", nextPending).build())
                 .setStyle(Notification.MediaStyle().setMediaSession(mediaSession?.sessionToken))
         else {
             Notification.Builder(this)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setLargeIcon(viewModel.song.value?.albumArt)
-                .setContentTitle(viewModel.song.value?.title)
-                .setContentText(viewModel.song.value?.artist)
+                .setLargeIcon(song.albumArt)
+                .setContentTitle(song.title)
+                .setContentText(song.artist)
                 .addAction(R.drawable.baseline_skip_previous_24, "Previous", prevPending)
+                .addAction(playPauseIcon, "Pause", playPausePending)
                 .addAction(R.drawable.baseline_skip_next_24, "Next", nextPending)
-                .addAction(R.drawable.baseline_pause_24, "Pause", playPausePending)
                 .setStyle(Notification.MediaStyle().setMediaSession(mediaSession?.sessionToken))
-        }.setPriority(Notification.PRIORITY_HIGH).build()
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setDefaults(Notification.DEFAULT_LIGHTS)
+                .setVibrate(longArrayOf(0L))
+        }.build()
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(0, notification)
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
         songPlayingService = (service as? SongPlayingService.SongPlayingServiceBinder)?.getService()
+        songPlayingService?.playerController = this
         viewModel.song.value?.let { setupAutoPlay(it) }
     }
 
@@ -315,13 +351,21 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
             songPlayingService?.start()
             setupDuration(start = lastDuration, end = viewModel.song.value?.duration ?: 0L)
         }
+        showNotification(currentSong)
     }
 
     override fun onNextClick() {
-        viewModel.onNextClick()
+        val nextSong = viewModel.getNextSong()?.also { setupAutoPlay(it) }
+        viewModel.updateSong(nextSong)
     }
 
     override fun onPreviousClick() {
-        viewModel.onPreviousClick()
+        val prevSong = viewModel.getPrevSong()?.also { setupAutoPlay(it) }
+        viewModel.updateSong(prevSong)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(notificationReceiver)
     }
 }

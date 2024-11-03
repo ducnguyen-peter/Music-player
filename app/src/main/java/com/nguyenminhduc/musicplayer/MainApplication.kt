@@ -34,6 +34,7 @@ class MainApplication: Application() {
             }
             val channel2 = NotificationChannel(CHANNEL_ID_2, "Channel2", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Channel2 description"
+                importance = NotificationManager.IMPORTANCE_LOW
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager.createNotificationChannel(channel1)

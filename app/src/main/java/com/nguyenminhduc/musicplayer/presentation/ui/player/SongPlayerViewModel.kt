@@ -26,19 +26,8 @@ class SongPlayerViewModel(
     private val _isRepeating = MutableLiveData(sharedPref.getIsRepeating())
     val isRepeating: LiveData<Boolean> = _isRepeating
 
-    fun onNextClick() {
-        _song.value = _songList.value?.get(getNextSongIndex())
-    }
-
-    fun onAutoNext() {
-        _song.value = if (!_isRepeating.value.orFalse())
-            _songList.value?.get(getNextSongIndex())
-        else _song.value
-    }
-
-    fun onPreviousClick() {
-        val prevSongIndex = (_songList.value.orEmpty().indexOf(_song.value) - 1).takeIf { it >= 0 } ?: 0
-        _song.value = _songList.value?.get(prevSongIndex)
+    fun updateSong(song: MusicFileUiModel?) {
+        _song.value = song
     }
 
     fun shuffleClick() {
@@ -51,9 +40,22 @@ class SongPlayerViewModel(
         sharedPref.setIsRepeating(_isRepeating.value.orFalse())
     }
 
+    fun getNextSong(): MusicFileUiModel? {
+        return _songList.value?.get(getNextSongIndex())
+    }
+
+    fun getPrevSong(): MusicFileUiModel? {
+        return _songList.value?.get(getPrevSongIndex())
+    }
+
     private fun getNextSongIndex(): Int {
+        if (_isRepeating.value.orFalse()) return _songList.value.orEmpty().indexOf(_song.value)
         return if (!_isShuffling.value.orFalse())
             (_songList.value.orEmpty().indexOf(_song.value) + 1) % _songList.value.orEmpty().size
         else Random.nextInt(until = _songList.value.orEmpty().size)
+    }
+
+    private fun getPrevSongIndex(): Int {
+        return (_songList.value.orEmpty().indexOf(_song.value) - 1).takeIf { it >= 0 } ?: 0
     }
 }
