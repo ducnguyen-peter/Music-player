@@ -1,5 +1,6 @@
 package com.nguyenminhduc.musicplayer.presentation.ui.player
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -113,16 +114,23 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         bindService(intent, this, BIND_AUTO_CREATE)
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private fun setupReceiver() {
         val intentFilter = IntentFilter()
         intentFilter.addAction(ACTION_PLAY)
         intentFilter.addAction(ACTION_NEXT)
         intentFilter.addAction(ACTION_PREVIOUS)
-        registerReceiver(
-            notificationReceiver,
-            intentFilter,
-            RECEIVER_NOT_EXPORTED
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(
+                notificationReceiver,
+                intentFilter,
+                RECEIVER_NOT_EXPORTED
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            registerReceiver(notificationReceiver, intentFilter)
+        } else {
+            registerReceiver(notificationReceiver, intentFilter)
+        }
     }
 
     private fun setupUI() {
@@ -213,9 +221,6 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, song.duration ?: 0L)
                 .build()
         )
-        if (songPlayingService != null) setupAutoPlay(song)
-        updateSeekBarDuration(song)
-        setupDuration(end = song.duration ?: 0L)
     }
 
     private fun setupAutoPlay(song: MusicFileUiModel) {
@@ -229,6 +234,8 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         songPlayingService?.setOnCompletionListener {
             viewModel.updateSong(viewModel.getNextSong()?.also { setupAutoPlay(it) })
         }
+        updateSeekBarDuration(song)
+        setupDuration(end = song.duration ?: 0L)
         showNotification(song)
     }
 
@@ -366,6 +373,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
 
     override fun onDestroy() {
         super.onDestroy()
+        unbindService(this)
         unregisterReceiver(notificationReceiver)
     }
 }

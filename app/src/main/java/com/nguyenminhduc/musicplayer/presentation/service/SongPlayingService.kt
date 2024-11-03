@@ -17,14 +17,19 @@ import com.nguyenminhduc.musicplayer.presentation.utils.orFalse
 class SongPlayingService: Service() {
 
     private val binder = SongPlayingServiceBinder()
-    var mediaPlayer: MediaPlayer? = null
-    var songList = listOf<MusicFile>()
-    var uri: Uri? = null
+    private var mediaPlayer: MediaPlayer? = null
+    private var songList = listOf<MusicFile>()
+//    private var uri: Uri? = null
     var playerController: PlayerController? = null
 
     override fun onBind(intent: Intent?): IBinder? {
         songList = (intent?.getParcelableArrayListExtra<MusicFile>(Const.ActivityArgs.ARG_LIST_SONG_MODEL)).orEmpty()
         return binder
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        mediaPlayer = null
+        return super.onUnbind(intent)
     }
 
     inner class SongPlayingServiceBinder: Binder() {
@@ -66,7 +71,7 @@ class SongPlayingService: Service() {
     }
 
     fun createMediaPlayer(index: Int) {
-        uri = Uri.parse(songList[index].path)
+        val uri = Uri.parse(songList[index].path)
         mediaPlayer = MediaPlayer.create(applicationContext, uri)
     }
 
