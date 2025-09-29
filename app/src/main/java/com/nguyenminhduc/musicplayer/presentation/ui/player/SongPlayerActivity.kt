@@ -37,6 +37,7 @@ import com.nguyenminhduc.musicplayer.presentation.ui.Const
 import com.nguyenminhduc.musicplayer.presentation.ui.mapper.MusicFileUiMapper
 import com.nguyenminhduc.musicplayer.presentation.ui.model.MusicFileUiModel
 import com.nguyenminhduc.musicplayer.presentation.utils.toMinuteAndSecond
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -211,10 +212,12 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         tvSongTitle.text = song.title
         tvSongArtistName.text = song.artist
         tvDuration.text = song.duration?.toMinuteAndSecond()
-        Glide.with(this)
-            .load(song.albumArt)
-            .placeholder(R.drawable.ic_launcher_foreground)
-            .into(ivSongAlbum)
+        CoroutineScope(Dispatchers.Main).launch {
+            Glide.with(this@SongPlayerActivity)
+                .load(song.albumArt.await())
+                .placeholder(R.drawable.ic_launcher_foreground)
+                .into(ivSongAlbum)
+        }
         mediaSession = MediaSession(this, "My Media Session")
         mediaSession?.setMetadata(
             MediaMetadata.Builder()
@@ -236,7 +239,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         }
         updateSeekBarDuration(song)
         setupDuration(end = song.duration ?: 0L)
-        showNotification(song)
+        lifecycleScope.launch { showNotification(song) }
     }
 
 
@@ -294,7 +297,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         countUpJob = null
     }
 
-    private fun showNotification(song: MusicFileUiModel) {
+    private suspend fun showNotification(song: MusicFileUiModel) {
         val playPauseIcon =
             if (songPlayingService?.isPlaying() == true) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
         val intent = Intent(this, SongPlayerActivity::class.java)
@@ -308,10 +311,10 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         val nextPending = PendingIntent.getBroadcast(this, 0, nextIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val playPausePending = PendingIntent.getBroadcast(this, 0, playPauseIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+        val notification: Notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             Notification.Builder(this, CHANNEL_ID_2)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setLargeIcon(song.albumArt)
+                .setLargeIcon(song.albumArt.await())
                 .setContentTitle(song.title)
                 .setContentText(song.artist)
                 .addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.baseline_skip_previous_24), "Previous", prevPending).build())
@@ -321,7 +324,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
         else {
             Notification.Builder(this)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setLargeIcon(song.albumArt)
+                .setLargeIcon(song.albumArt.await())
                 .setContentTitle(song.title)
                 .setContentText(song.artist)
                 .addAction(R.drawable.baseline_skip_previous_24, "Previous", prevPending)
@@ -358,7 +361,7 @@ class SongPlayerActivity : AppCompatActivity(), ServiceConnection, PlayerControl
             songPlayingService?.start()
             setupDuration(start = lastDuration, end = viewModel.song.value?.duration ?: 0L)
         }
-        showNotification(currentSong)
+        lifecycleScope.launch { showNotification(currentSong) }
     }
 
     override fun onNextClick() {

@@ -56,6 +56,7 @@ dependencies {
     implementation("io.insert-koin:koin-android-compat")
     implementation("io.insert-koin:koin-androidx-navigation")
     implementation("androidx.media:media:1.7.0")
+    implementation(libs.androidx.work.runtime.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

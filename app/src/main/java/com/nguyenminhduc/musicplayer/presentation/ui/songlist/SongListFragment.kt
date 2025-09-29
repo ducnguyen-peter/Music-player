@@ -6,9 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.nguyenminhduc.musicplayer.databinding.FragmentSongListBinding
+import com.nguyenminhduc.musicplayer.presentation.ui.songlist.adapter.SongListAdapter
 
 class SongListFragment: Fragment() {
 

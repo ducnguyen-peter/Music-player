@@ -1,4 +1,4 @@
-package com.nguyenminhduc.musicplayer.presentation.ui.songlist
+package com.nguyenminhduc.musicplayer.presentation.ui.songlist.adapter
 
 import android.content.Intent
 import android.view.LayoutInflater
@@ -25,6 +25,11 @@ class SongListAdapter : ListAdapter<MusicFileUiModel, SongListAdapter.SongItemVi
         }
     }
 ) {
+
+    override fun getItemViewType(position: Int): Int {
+
+        return super.getItemViewType(position)
+    }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SongItemViewHolder {
         return SongItemViewHolder(

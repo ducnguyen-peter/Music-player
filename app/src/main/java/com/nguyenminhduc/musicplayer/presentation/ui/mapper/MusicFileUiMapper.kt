@@ -12,7 +12,6 @@ object MusicFileUiMapper {
         artist = from.artist,
         album = from.album,
         duration = from.duration,
-        _albumArt = from.path.getSongAlbumImage()
     )
 
     fun mapToEntity(from: MusicFileUiModel) = MusicFile(
